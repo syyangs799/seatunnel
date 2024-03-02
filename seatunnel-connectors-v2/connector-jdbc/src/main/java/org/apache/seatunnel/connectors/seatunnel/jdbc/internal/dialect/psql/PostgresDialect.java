@@ -17,21 +17,32 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.psql;
 
+import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.converter.JdbcRowConverter;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectTypeMapper;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.SQLUtils;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.dialectenum.FieldIdeEnum;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.source.JdbcSourceTable;
+
+import org.apache.commons.lang3.StringUtils;
+
+import lombok.extern.slf4j.Slf4j;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class PostgresDialect implements JdbcDialect {
 
+    private static final long serialVersionUID = -5834746193472465218L;
     public static final int DEFAULT_POSTGRES_FETCH_SIZE = 128;
 
     public String fieldIde = FieldIdeEnum.ORIGINAL.getValue();
@@ -44,7 +55,7 @@ public class PostgresDialect implements JdbcDialect {
 
     @Override
     public String dialectName() {
-        return "PostgreSQL";
+        return DatabaseIdentifier.POSTGRESQL;
     }
 
     @Override
@@ -55,6 +66,11 @@ public class PostgresDialect implements JdbcDialect {
     @Override
     public JdbcDialectTypeMapper getJdbcDialectTypeMapper() {
         return new PostgresTypeMapper();
+    }
+
+    @Override
+    public String hashModForField(String fieldName, int mod) {
+        return "(ABS(HASHTEXT(" + quoteIdentifier(fieldName) + ")) % " + mod + ")";
     }
 
     @Override
@@ -124,5 +140,45 @@ public class PostgresDialect implements JdbcDialect {
     @Override
     public String quoteDatabaseIdentifier(String identifier) {
         return "\"" + identifier + "\"";
+    }
+
+    @Override
+    public TablePath parse(String tablePath) {
+        return TablePath.of(tablePath, true);
+    }
+
+    @Override
+    public Long approximateRowCntStatement(Connection connection, JdbcSourceTable table)
+            throws SQLException {
+
+        // 1. If no query is configured, use TABLE STATUS.
+        // 2. If a query is configured but does not contain a WHERE clause and tablePath is
+        // configured, use TABLE STATUS.
+        // 3. If a query is configured with a WHERE clause, or a query statement is configured but
+        // tablePath is not, use COUNT(*).
+
+        boolean useTableStats =
+                StringUtils.isBlank(table.getQuery())
+                        || (!table.getQuery().toLowerCase().contains("where")
+                                && table.getTablePath() != null);
+        if (useTableStats) {
+            String rowCountQuery =
+                    String.format(
+                            "SELECT reltuples FROM pg_class r WHERE relkind = 'r' AND relname = '%s';",
+                            table.getTablePath().getTableName());
+            try (Statement stmt = connection.createStatement()) {
+                log.info("Split Chunk, approximateRowCntStatement: {}", rowCountQuery);
+                try (ResultSet rs = stmt.executeQuery(rowCountQuery)) {
+                    if (!rs.next()) {
+                        throw new SQLException(
+                                String.format(
+                                        "No result returned after running query [%s]",
+                                        rowCountQuery));
+                    }
+                    return rs.getLong(1);
+                }
+            }
+        }
+        return SQLUtils.countForSubquery(connection, table.getQuery());
     }
 }
