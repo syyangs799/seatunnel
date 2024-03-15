@@ -15,21 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.seatunnel.engine.common.loader;
+package org.apache.seatunnel.common.utils;
 
-import lombok.extern.slf4j.Slf4j;
+import org.apache.seatunnel.common.exception.CommonError;
 
-@Slf4j
-public class ClassLoaderUtil {
+import org.apache.commons.lang3.StringUtils;
 
-    public static void recycleClassLoaderFromThread(ClassLoader classLoader) {
-        log.info("recycle classloader " + classLoader);
-        Thread.getAllStackTraces().keySet().stream()
-                .filter(thread -> thread.getContextClassLoader() == classLoader)
-                .forEach(
-                        thread -> {
-                            log.info("recycle classloader for thread " + thread.getName());
-                            thread.setContextClassLoader(null);
-                        });
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+
+public class EncodingUtils {
+
+    /**
+     * try to parse charset by encoding name. such as ISO-8859-1, GBK, UTF-8. If failed, will use
+     * UTF-8 as the default charset
+     *
+     * @param encoding the charset name
+     */
+    public static Charset tryParseCharset(String encoding) {
+        if (StringUtils.isBlank(encoding)) {
+            return StandardCharsets.UTF_8;
+        }
+        try {
+            return Charset.forName(encoding);
+        } catch (Exception e) {
+            throw CommonError.unsupportedEncoding(encoding);
+        }
     }
 }
