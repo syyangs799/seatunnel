@@ -17,14 +17,14 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.hive;
 
-import org.apache.seatunnel.api.table.catalog.TableSchema;
-import org.apache.seatunnel.api.table.type.SeaTunnelRow;
-import org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorErrorCode;
-import org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.converter.AbstractJdbcRowConverter;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.DatabaseIdentifier;
 
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 public class HiveJdbcRowConverter extends AbstractJdbcRowConverter {
 
@@ -34,10 +34,19 @@ public class HiveJdbcRowConverter extends AbstractJdbcRowConverter {
     }
 
     @Override
-    public PreparedStatement toExternal(
-            TableSchema tableSchema, SeaTunnelRow row, PreparedStatement statement) {
-        throw new JdbcConnectorException(
-                JdbcConnectorErrorCode.DONT_SUPPORT_SINK,
-                "The Hive jdbc connector don't support sink");
+    protected void writeTime(PreparedStatement statement, int index, LocalTime time)
+            throws SQLException {
+        // Write to time column using timestamp retains milliseconds
+        statement.setTimestamp(
+                index, java.sql.Timestamp.valueOf(LocalDateTime.of(LocalDate.now(), time)));
     }
+
+    // syyang 放开hive写入
+    //    @Override
+    //    public PreparedStatement toExternal(
+    //            TableSchema tableSchema, SeaTunnelRow row, PreparedStatement statement) {
+    //        throw new JdbcConnectorException(
+    //                JdbcConnectorErrorCode.DONT_SUPPORT_SINK,
+    //                "The Hive jdbc connector don't support sink");
+    //    }
 }
