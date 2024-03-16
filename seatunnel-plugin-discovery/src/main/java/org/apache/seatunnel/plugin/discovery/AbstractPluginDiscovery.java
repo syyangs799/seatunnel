@@ -51,6 +51,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -299,21 +300,29 @@ public abstract class AbstractPluginDiscovery<T> implements PluginDiscovery<T> {
 
     protected T loadPluginInstance(PluginIdentifier pluginIdentifier, ClassLoader classLoader) {
         ServiceLoader<T> serviceLoader = ServiceLoader.load(getPluginBaseClass(), classLoader);
-        for (T t : serviceLoader) {
+        T result = null;
+        for (Iterator iter = serviceLoader.iterator(); iter.hasNext(); ) {
+            T t = null;
+            try {
+                t = (T) iter.next();
+            } catch (Throwable e) {
+                continue;
+            }
             if (t instanceof PluginIdentifierInterface) {
                 // new api
                 PluginIdentifierInterface pluginIdentifierInstance = (PluginIdentifierInterface) t;
                 if (StringUtils.equalsIgnoreCase(
                         pluginIdentifierInstance.getPluginName(),
                         pluginIdentifier.getPluginName())) {
-                    return (T) pluginIdentifierInstance;
+                    result = (T) pluginIdentifierInstance;
+                    return result;
                 }
             } else {
                 throw new UnsupportedOperationException(
                         "Plugin instance: " + t + " is not supported.");
             }
         }
-        return null;
+        return result;
     }
 
     /**
