@@ -100,6 +100,45 @@ public class FixedChunkSplitter extends ChunkSplitter {
         return createNumberColumnSplitStatement(split);
     }
 
+    @Override
+    protected String createSplitStatementSql(JdbcSourceSplit split) throws SQLException {
+        getOrEstablishConnection();
+        String splitQuery = split.getSplitQuery();
+        if (SqlType.STRING.equals(split.getSplitKeyType().getSqlType())) {
+            if (StringUtils.isNotBlank(config.getWhereConditionClause())) {
+                splitQuery =
+                        String.format(
+                                "SELECT * FROM (%s) tmp %s",
+                                split.getSplitQuery(), config.getWhereConditionClause());
+            }
+            return splitQuery;
+        }
+        if (split.getSplitStart() == null && split.getSplitEnd() == null) {
+            if (StringUtils.isEmpty(splitQuery)) {
+                splitQuery =
+                        String.format(
+                                "SELECT * FROM %s",
+                                jdbcDialect.tableIdentifier(split.getTablePath()));
+            }
+            return splitQuery;
+        }
+        String splitKeyName = jdbcDialect.quoteIdentifier(split.getSplitKeyName());
+        if (StringUtils.isNotBlank(split.getSplitQuery())) {
+            splitQuery =
+                    String.format(
+                            "SELECT * FROM (%s) st_jdbc_splitter WHERE %s >= ? AND %s <= ?",
+                            split.getSplitQuery(), splitKeyName, splitKeyName);
+        } else {
+            splitQuery =
+                    String.format(
+                            "SELECT * FROM %s WHERE %s >= ? AND %s <= ?",
+                            jdbcDialect.tableIdentifier(split.getTablePath()),
+                            splitKeyName,
+                            splitKeyName);
+        }
+        return splitQuery;
+    }
+
     private Collection<JdbcSourceSplit> createStringColumnSplits(
             JdbcSourceTable table, String splitKeyName, SeaTunnelDataType splitKeyType) {
         List<JdbcSourceSplit> splits = new ArrayList<>(table.getPartitionNumber());

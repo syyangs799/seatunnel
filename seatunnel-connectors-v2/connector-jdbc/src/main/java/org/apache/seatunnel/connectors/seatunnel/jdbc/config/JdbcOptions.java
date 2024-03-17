@@ -150,7 +150,7 @@ public interface JdbcOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("support upsert by insert only");
-
+    /** source config++ */
     Option<Boolean> USE_COPY_STATEMENT =
             Options.key("use_copy_statement")
                     .booleanType()

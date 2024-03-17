@@ -120,8 +120,17 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
         return createSplitStatement(split);
     }
 
+    public String generateCopySplitStatementSql(JdbcSourceSplit split) throws SQLException {
+        if (split.getSplitKeyName() == null) {
+            return createSingleSplitStatementSql(split);
+        }
+        return createSplitStatementSql(split);
+    }
+
     protected abstract PreparedStatement createSplitStatement(JdbcSourceSplit split)
             throws SQLException;
+
+    protected abstract String createSplitStatementSql(JdbcSourceSplit split) throws SQLException;
 
     protected PreparedStatement createPreparedStatement(String sql) throws SQLException {
         Connection connection = getOrEstablishConnection();
@@ -137,7 +146,7 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
         return jdbcDialect.creatPreparedStatement(connection, sql, fetchSize);
     }
 
-    protected Connection getOrEstablishConnection() throws SQLException {
+    public Connection getOrEstablishConnection() throws SQLException {
         try {
             return connectionProvider.getOrEstablishConnection();
         } catch (ClassNotFoundException e) {
@@ -169,6 +178,18 @@ public abstract class ChunkSplitter implements AutoCloseable, Serializable {
                             "SELECT * FROM %s", jdbcDialect.tableIdentifier(split.getTablePath()));
         }
         return createPreparedStatement(splitQuery);
+    }
+
+    protected String createSingleSplitStatementSql(JdbcSourceSplit split) throws SQLException {
+        String splitQuery = split.getSplitQuery();
+        if (StringUtils.isEmpty(splitQuery)) {
+            splitQuery =
+                    String.format(
+                            "SELECT * FROM %s", jdbcDialect.tableIdentifier(split.getTablePath()));
+        }
+        // 测试连接是正常可用的
+        getOrEstablishConnection();
+        return splitQuery;
     }
 
     protected Object queryMin(JdbcSourceTable table, String columnName, Object excludedLowerBound)

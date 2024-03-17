@@ -90,6 +90,7 @@ public class JdbcCatalogUtils {
                                         .partitionNumber(tableConfig.getPartitionNumber())
                                         .partitionStart(tableConfig.getPartitionStart())
                                         .partitionEnd(tableConfig.getPartitionEnd())
+                                        .useCopyStatement(tableConfig.isUseCopyStatement())
                                         .catalogTable(catalogTable)
                                         .build();
                         tables.put(tablePath, jdbcSourceTable);
@@ -135,6 +136,7 @@ public class JdbcCatalogUtils {
                                 .partitionNumber(tableConfig.getPartitionNumber())
                                 .partitionStart(tableConfig.getPartitionStart())
                                 .partitionEnd(tableConfig.getPartitionEnd())
+                                .useCopyStatement(tableConfig.isUseCopyStatement())
                                 .catalogTable(catalogTable)
                                 .build();
 

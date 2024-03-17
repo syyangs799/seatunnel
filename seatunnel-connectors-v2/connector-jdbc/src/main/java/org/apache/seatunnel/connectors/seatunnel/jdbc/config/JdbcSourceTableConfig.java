@@ -58,6 +58,9 @@ public class JdbcSourceTableConfig implements Serializable {
     @JsonProperty("partition_upper_bound")
     private BigDecimal partitionEnd;
 
+    @JsonProperty("use_copy_statement")
+    private boolean useCopyStatement;
+
     @Tolerate
     public JdbcSourceTableConfig() {}
 
@@ -79,6 +82,7 @@ public class JdbcSourceTableConfig implements Serializable {
                             .partitionNumber(connectorConfig.get(JdbcOptions.PARTITION_NUM))
                             .partitionStart(connectorConfig.get(JdbcOptions.PARTITION_LOWER_BOUND))
                             .partitionEnd(connectorConfig.get(JdbcOptions.PARTITION_UPPER_BOUND))
+                            .useCopyStatement(connectorConfig.get(JdbcOptions.USE_COPY_STATEMENT))
                             .build();
             tableList = Collections.singletonList(tableProperty);
         }

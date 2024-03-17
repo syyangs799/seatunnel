@@ -42,6 +42,7 @@ public class JdbcSourceConfig implements Serializable {
     private double splitEvenDistributionFactorLowerBound;
     private int splitSampleShardingThreshold;
     private int splitInverseSamplingRate;
+    private boolean useCopyStatement;
 
     public static JdbcSourceConfig of(ReadonlyConfig config) {
         JdbcSourceConfig.Builder builder = JdbcSourceConfig.builder();
@@ -74,6 +75,7 @@ public class JdbcSourceConfig implements Serializable {
                             }
                             builder.whereConditionClause(whereConditionClause);
                         });
+        builder.useCopyStatement(config.get(JdbcOptions.USE_COPY_STATEMENT));
 
         return builder.build();
     }
