@@ -19,6 +19,7 @@ package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.OutputStream;
 import java.io.Reader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
@@ -28,7 +29,7 @@ import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.SQLException;
 
-class CopyManagerProxy {
+public class CopyManagerProxy {
     private static final Logger LOG = LoggerFactory.getLogger(CopyManagerProxy.class);
     Object connection;
     Object copyManager;
@@ -36,8 +37,9 @@ class CopyManagerProxy {
     Class<?> copyManagerClazz;
     Method getCopyAPIMethod;
     Method copyInMethod;
+    Method copyOutMethod;
 
-    CopyManagerProxy(Connection connection)
+    public CopyManagerProxy(Connection connection)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException,
                     SQLException {
         LOG.info("Proxy connection class: {}", connection.getClass().getName());
@@ -59,11 +61,18 @@ class CopyManagerProxy {
         this.copyManager = this.getCopyAPIMethod.invoke(this.connection);
         this.copyManagerClazz = this.copyManager.getClass();
         this.copyInMethod = this.copyManagerClazz.getMethod("copyIn", String.class, Reader.class);
+        this.copyOutMethod =
+                this.copyManagerClazz.getMethod("copyOut", String.class, OutputStream.class);
     }
 
-    long doCopy(String sql, Reader reader)
+    public long doCopy(String sql, Reader reader)
             throws InvocationTargetException, IllegalAccessException {
         return (long) this.copyInMethod.invoke(this.copyManager, sql, reader);
+    }
+
+    public long doCopyOut(String sql, OutputStream out)
+            throws InvocationTargetException, IllegalAccessException {
+        return (long) this.copyOutMethod.invoke(this.copyManager, sql, out);
     }
 
     private static Object getConnectionFromInvocationHandler(InvocationHandler handler)

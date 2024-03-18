@@ -38,4 +38,5 @@ public class JdbcSourceTable implements Serializable {
     private final BigDecimal partitionStart;
     private final BigDecimal partitionEnd;
     private final CatalogTable catalogTable;
+    private final boolean useCopyStatement;
 }

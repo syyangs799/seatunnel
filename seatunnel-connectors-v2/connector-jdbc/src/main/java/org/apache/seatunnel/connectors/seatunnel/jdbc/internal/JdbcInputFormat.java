@@ -18,6 +18,7 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal;
 
+import org.apache.seatunnel.api.source.Collector;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
@@ -30,12 +31,15 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorExc
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.converter.JdbcRowConverter;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectLoader;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.psql.PostgresDialect;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.executor.CopyManagerProxy;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.source.ChunkSplitter;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.source.JdbcSourceSplit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.sql.PreparedStatement;
@@ -61,8 +65,13 @@ public class JdbcInputFormat implements Serializable {
     private transient String splitTableId;
     private transient TableSchema splitTableSchema;
     private transient PreparedStatement statement;
+    private transient String statementSql;
     private transient ResultSet resultSet;
     private volatile boolean hasNext;
+    private volatile boolean useCopyStatement;
+    CopyManagerProxy copyManagerProxy;
+
+    private static final int BUFFER_SIZE = 4096; // 设置缓存大小
 
     public JdbcInputFormat(JdbcSourceConfig config, Map<TablePath, CatalogTable> tables) {
         this.jdbcDialect =
@@ -71,6 +80,9 @@ public class JdbcInputFormat implements Serializable {
         this.chunkSplitter = ChunkSplitter.create(config);
         this.jdbcRowConverter = jdbcDialect.getRowConverter();
         this.tables = tables;
+        // 此处判断只有postgres可以进行copy
+        this.useCopyStatement =
+                config.isUseCopyStatement() && (this.jdbcDialect instanceof PostgresDialect);
     }
 
     public void openInputFormat() {}
@@ -94,15 +106,29 @@ public class JdbcInputFormat implements Serializable {
         try {
             splitTableSchema = tables.get(inputSplit.getTablePath()).getTableSchema();
             splitTableId = inputSplit.getTablePath().toString();
+            if (useCopyStatement) {
+                LOG.info(
+                        "当前数据源类型【{}】,并且配置useCopyStatement【{}】，成功开启COPY模式读取数据!!!",
+                        this.jdbcDialect.dialectName(),
+                        true);
+                // 判断如果当前类型为postgres并且开启copy参数，则使用最新的copy代码将数据导出
+                statementSql = chunkSplitter.generateCopySplitStatementSql(inputSplit);
+                this.copyManagerProxy =
+                        new CopyManagerProxy(chunkSplitter.getOrEstablishConnection());
+            } else {
+                statement = chunkSplitter.generateSplitStatement(inputSplit);
 
-            statement = chunkSplitter.generateSplitStatement(inputSplit);
-            resultSet = statement.executeQuery();
-            hasNext = resultSet.next();
+                resultSet = statement.executeQuery();
+                hasNext = resultSet.next();
+            }
         } catch (SQLException se) {
             throw new JdbcConnectorException(
                     JdbcConnectorErrorCode.CONNECT_DATABASE_FAILED,
                     "open() failed." + se.getMessage(),
                     se);
+        } catch (Exception e) {
+            throw new JdbcConnectorException(
+                    JdbcConnectorErrorCode.CONNECT_DATABASE_FAILED, e.getMessage());
         }
     }
 
@@ -137,6 +163,10 @@ public class JdbcInputFormat implements Serializable {
         return !hasNext;
     }
 
+    public boolean copyEnable() {
+        return useCopyStatement;
+    }
+
     /** Convert a row of data to seatunnelRow */
     public SeaTunnelRow nextRecord() {
         try {
@@ -156,6 +186,67 @@ public class JdbcInputFormat implements Serializable {
                     "Couldn't read data - " + se.getMessage(),
                     se);
         } catch (NullPointerException npe) {
+            throw new JdbcConnectorException(
+                    CommonErrorCodeDeprecated.SQL_OPERATION_FAILED,
+                    "Couldn't access resultSet",
+                    npe);
+        }
+    }
+
+    /** Convert a row of data to seatunnelRow */
+    public void copyAllRecord(Collector<SeaTunnelRow> collector) {
+
+        try {
+            String copySql = "COPY (" + statementSql + ") TO STDOUT DELIMITER '|' CSV";
+            // Execute COPY TO STDOUT command
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            long bytesCopied = this.copyManagerProxy.doCopyOut(copySql, byteArrayOutputStream);
+            // Parse and process copied data
+            // Get the byte array written to ByteArrayOutputStream
+            byte[] data = byteArrayOutputStream.toByteArray();
+            // Process data in chunks
+            int offset = 0;
+            StringBuilder lineBuffer = new StringBuilder();
+            while (offset < data.length) {
+                // Calculate the remaining bytes to be read in this chunk
+                int remaining = Math.min(BUFFER_SIZE, data.length - offset);
+                // Read the chunk of data into a byte array
+                byte[] buffer = new byte[remaining];
+                System.arraycopy(data, offset, buffer, 0, remaining);
+                // Process the chunk of data
+                offset += remaining;
+                lineBuffer.append(new String(buffer));
+                String[] lines = lineBuffer.toString().split("\\r?\\n");
+                if (lines.length > 1) {
+                    // 不截断最后一行，否则数据出错
+                    for (int i = 0; i < lines.length - 1; i++) {
+                        // Process each complete line of data as needed=
+                        String[] fields =
+                                lines[i].split("\\|"); // Assuming '|' is used as delimiter
+                        SeaTunnelRow seaTunnelRow =
+                                jdbcRowConverter.toInternal(fields, splitTableSchema);
+                        seaTunnelRow.setTableId(splitTableId);
+                        seaTunnelRow.setRowKind(RowKind.INSERT);
+                        collector.collect(seaTunnelRow);
+                    }
+                    // Save the last potentially incomplete line for the next iteration
+                    lineBuffer.setLength(0);
+                    lineBuffer.append(lines[lines.length - 1]);
+                }
+            }
+            LOG.info("Total bytes copied: " + bytesCopied);
+
+        } catch (SQLException se) {
+            throw new JdbcConnectorException(
+                    CommonErrorCodeDeprecated.SQL_OPERATION_FAILED,
+                    "Couldn't read data - " + se.getMessage(),
+                    se);
+        } catch (NullPointerException npe) {
+            throw new JdbcConnectorException(
+                    CommonErrorCodeDeprecated.SQL_OPERATION_FAILED,
+                    "Couldn't access resultSet",
+                    npe);
+        } catch (Exception npe) {
             throw new JdbcConnectorException(
                     CommonErrorCodeDeprecated.SQL_OPERATION_FAILED,
                     "Couldn't access resultSet",

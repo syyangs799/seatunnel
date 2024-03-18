@@ -67,6 +67,12 @@ public class DynamicChunkSplitter extends ChunkSplitter {
         return createDynamicSplitStatement(split);
     }
 
+    @Override
+    protected String createSplitStatementSql(JdbcSourceSplit split) throws SQLException {
+        getOrEstablishConnection();
+        return createDynamicSplitQuerySQL(split);
+    }
+
     private Collection<JdbcSourceSplit> createDynamicSplits(
             JdbcSourceTable table, SeaTunnelRowType splitKey) throws SQLException {
         String splitKeyName = splitKey.getFieldNames()[0];

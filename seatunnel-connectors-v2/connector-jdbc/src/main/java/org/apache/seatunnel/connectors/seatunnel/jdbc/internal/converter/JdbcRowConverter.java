@@ -38,6 +38,8 @@ public interface JdbcRowConverter extends Serializable {
      */
     SeaTunnelRow toInternal(ResultSet rs, TableSchema tableSchema) throws SQLException;
 
+    SeaTunnelRow toInternal(String[] fieldDatas, TableSchema tableSchema) throws SQLException;
+
     PreparedStatement toExternal(
             TableSchema tableSchema, SeaTunnelRow row, PreparedStatement statement)
             throws SQLException;
