@@ -15,27 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.seatunnel.api.sink;
+package org.apache.seatunnel.connectors.seatunnel.paimon.sink;
 
-import org.apache.seatunnel.api.table.catalog.Catalog;
-import org.apache.seatunnel.api.table.catalog.TablePath;
-
-public interface SaveModeHandler extends AutoCloseable {
-
-    void handleSchemaSaveMode();
-
-    void handleDataSaveMode();
-
-    SchemaSaveMode getSchemaSaveMode();
-
-    DataSaveMode getDataSaveMode();
-
-    TablePath getHandleTablePath();
-
-    Catalog getHandleCatalog();
-
-    default void handleSaveMode() {
-        handleSchemaSaveMode();
-        handleDataSaveMode();
-    }
+public interface SupportLoadTable<T> {
+    void setLoadTable(T table);
 }

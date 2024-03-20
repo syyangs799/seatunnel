@@ -15,27 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.seatunnel.api.sink;
+package org.apache.seatunnel.connectors.seatunnel.paimon.utils;
 
-import org.apache.seatunnel.api.table.catalog.Catalog;
-import org.apache.seatunnel.api.table.catalog.TablePath;
+import org.apache.seatunnel.api.common.JobContext;
+import org.apache.seatunnel.common.constants.JobMode;
 
-public interface SaveModeHandler extends AutoCloseable {
+import lombok.extern.slf4j.Slf4j;
 
-    void handleSchemaSaveMode();
+/** Job env util */
+@Slf4j
+public class JobContextUtil {
 
-    void handleDataSaveMode();
-
-    SchemaSaveMode getSchemaSaveMode();
-
-    DataSaveMode getDataSaveMode();
-
-    TablePath getHandleTablePath();
-
-    Catalog getHandleCatalog();
-
-    default void handleSaveMode() {
-        handleSchemaSaveMode();
-        handleDataSaveMode();
+    public static boolean isBatchJob(JobContext jobContext) {
+        return jobContext.getJobMode().equals(JobMode.BATCH);
     }
 }

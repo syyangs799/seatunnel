@@ -15,27 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.seatunnel.api.sink;
+package org.apache.seatunnel.connectors.seatunnel.paimon.catalog;
 
-import org.apache.seatunnel.api.table.catalog.Catalog;
 import org.apache.seatunnel.api.table.catalog.TablePath;
+import org.apache.seatunnel.api.table.catalog.exception.CatalogException;
+import org.apache.seatunnel.api.table.catalog.exception.TableNotExistException;
 
-public interface SaveModeHandler extends AutoCloseable {
+import org.apache.paimon.table.Table;
 
-    void handleSchemaSaveMode();
-
-    void handleDataSaveMode();
-
-    SchemaSaveMode getSchemaSaveMode();
-
-    DataSaveMode getDataSaveMode();
-
-    TablePath getHandleTablePath();
-
-    Catalog getHandleCatalog();
-
-    default void handleSaveMode() {
-        handleSchemaSaveMode();
-        handleDataSaveMode();
-    }
+public interface PaimonTable {
+    Table getPaimonTable(TablePath tablePath) throws CatalogException, TableNotExistException;
 }
