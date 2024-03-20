@@ -106,6 +106,8 @@ public class SeaTunnelDataTypeConvertorUtil {
                 return "SMALLINT";
             case "BYTE":
                 return "TINYINT";
+            case "TEXT":
+                return "STRING";
             default:
                 return declare;
         }
